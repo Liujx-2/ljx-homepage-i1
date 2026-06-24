@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ljx的聊天室_</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Microsoft YaHei", sans-serif;
+            background: #0f0f1a;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .chat-container {
+            width: 420px;
+            max-width: 96%;
+            height: 680px;
+            max-height: 96vh;
+            background: #1a1a2e;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #2a2a4a;
+        }
+        .header {
+            padding: 20px 24px 16px;
+            background: linear-gradient(135deg, #16213e, #1a1a2e);
+            border-bottom: 1px solid #2a2a4a;
+            flex-shrink: 0;
+        }
+        .header h1 {
+            color: #e0e0ff;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .header .sub {
+            color: #8888aa;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #14142a;
+        }
+        .msg {
+            max-width: 80%;
+            padding: 10px 16px;
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            animation: fadeIn 0.25s ease;
+        }
+        .msg.self {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #4a6cf7, #6a4cf7);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .msg.other {
+            align-self: flex-start;
+            background: #25254a;
+            color: #d0d0f0;
+            border-bottom-left-radius: 4px;
+        }
+        .msg .name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #8888cc;
+            margin-bottom: 2px;
+        }
+        .msg.self .name { color: #aabbff; }
+        .msg .time {
+            font-size: 10px;
+            color: #666688;
+            margin-left: 10px;
+        }
+        .input-area {
+            padding: 16px 20px 20px;
+            background: #1a1a2e;
+            border-top: 1px solid #2a2a4a;
+            display: flex;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 12px 18px;
+            border-radius: 30px;
+            border: 1px solid #333366;
+            background: #0f0f20;
+            color: #e0e0ff;
+            font-size: 15px;
+            outline: none;
+            transition: 0.2s;
+        }
+        .input-area input:focus {
+            border-color: #6a4cf7;
+            box-shadow: 0 0 0 3px rgba(106, 76, 247, 0.15);
+        }
+        .input-area input::placeholder { color: #555577; }
+        .input-area button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #4a6cf7, #6a4cf7);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            white-space: nowrap;
+        }
+        .input-area button:hover { transform: scale(1.02); opacity: 0.9; }
+        .input-area button:active { transform: scale(0.96); }
+        .system {
+            text-align: center;
+            color: #444466;
+            font-size: 12px;
+            padding: 6px 0;
+        }
+        .loading {
+            text-align: center;
+            color: #555577;
+            font-size: 13px;
+            padding: 30px 0;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .messages::-webkit-scrollbar { width: 4px; }
+        .messages::-webkit-scrollbar-track { background: transparent; }
+        .messages::-webkit-scrollbar-thumb { background: #333366; border-radius: 10px; }
+        .username-setup {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #14142a;
+        }
+        .username-setup input {
+            padding: 12px 18px;
+            border-radius: 30px;
+            border: 1px solid #333366;
+            background: #0f0f20;
+            color: #e0e0ff;
+            font-size: 15px;
+            outline: none;
+        }
+        .username-setup button {
+            padding: 12px;
+            border: none;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #4a6cf7, #6a4cf7);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="header">
+        <h1>💬 聊天室</h1>
+        <div class="sub" id="statusText">⏳ 连接中...</div>
+    </div>
+
+    <!-- 用户名设置界面 -->
+    <div id="setupPanel" class="username-setup">
+        <p style="color:#8888aa;font-size:14px;">输入你的昵称开始聊天</p>
+        <input type="text" id="usernameInput" placeholder="昵称" maxlength="20">
+        <button id="joinBtn">加入聊天</button>
+    </div>
+
+    <!-- 聊天界面（初始隐藏） -->
+    <div id="chatPanel" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <div class="messages" id="messageContainer">
+            <div class="loading" id="loadingIndicator">⏳ 加载历史记录...</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="输入消息..." disabled>
+            <button id="sendButton" disabled>发送</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ========== 配置区域（替换成你的 Supabase 信息）==========
+    const SUPABASE_URL = 'https://zqobkcjmwjsbvkjeudih.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpxb2JrY2ptd2pzYnZramV1ZGloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMTQzNzEsImV4cCI6MjA5Nzg5MDM3MX0.JEpcw6jBkSf2yC_cebPCZAAa4Pky8BxA42WtbfgYXwg';
+    // =========================================================
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentUsername = '';
+    let isJoined = false;
+
+    // DOM
+    const setupPanel = document.getElementById('setupPanel');
+    const chatPanel = document.getElementById('chatPanel');
+    const usernameInput = document.getElementById('usernameInput');
+    const joinBtn = document.getElementById('joinBtn');
+    const msgContainer = document.getElementById('messageContainer');
+    const msgInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendButton');
+    const statusText = document.getElementById('statusText');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+
+    // ---------- 工具 ----------
+    function formatTime(isoStr) {
+        const d = new Date(isoStr);
+        return d.getHours().toString().padStart(2,'0') + ':' +
+               d.getMinutes().toString().padStart(2,'0');
+    }
+
+    function addMessage(content, username, created_at, isSelf) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + (isSelf ? 'self' : 'other');
+
+        const nameSpan = document.createElement('div');
+        nameSpan.className = 'name';
+        nameSpan.textContent = username + '  ' + formatTime(created_at);
+        div.appendChild(nameSpan);
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = content;
+        div.appendChild(textSpan);
+
+        msgContainer.appendChild(div);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+
+    function addSystemMsg(text) {
+        const div = document.createElement('div');
+        div.className = 'system';
+        div.textContent = text;
+        msgContainer.appendChild(div);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+
+    // ---------- 加载历史消息 ----------
+    async function loadHistory() {
+        loadingIndicator.textContent = '⏳ 加载历史记录...';
+        const { data, error } = await supabase
+            .from('messages')
+            .select('*')
+            .order('created_at', { ascending: true })
+            .limit(200);
+
+        if (loadingIndicator) loadingIndicator.remove();
+
+        if (error) {
+            console.error('加载历史失败:', error);
+            addSystemMsg('⚠️ 加载历史失败，请刷新重试');
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            addSystemMsg('📭 暂无消息，发一条开始聊天吧！');
+            return;
+        }
+
+        for (const msg of data) {
+            const isSelf = (msg.username === currentUsername);
+            addMessage(msg.content, msg.username, msg.created_at, isSelf);
+        }
+        addSystemMsg('✅ 已加载 ' + data.length + ' 条历史消息');
+    }
+
+    // ---------- 发送消息 ----------
+    async function sendMessage() {
+        const content = msgInput.value.trim();
+        if (!content || !isJoined) return;
+
+        // 乐观渲染（先显示在自己的界面上）
+        const now = new Date().toISOString();
+        addMessage(content, currentUsername, now, true);
+        msgInput.value = '';
+        msgInput.focus();
+
+        // 写入数据库
+        const { error } = await supabase
+            .from('messages')
+            .insert([{ content, username: currentUsername }]);
+
+        if (error) {
+            console.error('发送失败:', error);
+            addSystemMsg('⚠️ 消息发送失败，请重试');
+        }
+    }
+
+    // ---------- 加入聊天 ----------
+    function joinChat() {
+        const name = usernameInput.value.trim();
+        if (!name) {
+            alert('请输入昵称');
+            return;
+        }
+        currentUsername = name;
+        isJoined = true;
+
+        // 切换界面
+        setupPanel.classList.add('hidden');
+        chatPanel.style.display = 'flex';
+        msgInput.disabled = false;
+        sendBtn.disabled = false;
+        statusText.textContent = '🟢 已连接 (' + currentUsername + ')';
+
+        // 加载历史
+        loadHistory();
+
+        // 订阅实时消息
+        supabase
+            .channel('messages')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages'
+            }, (payload) => {
+                const msg = payload.new;
+                // 跳过自己发的（已经显示了）
+                if (msg.username === currentUsername) return;
+                addMessage(msg.content, msg.username, msg.created_at, false);
+            })
+            .subscribe();
+
+        msgInput.focus();
+    }
+
+    // ---------- 事件绑定 ----------
+    joinBtn.addEventListener('click', joinChat);
+    usernameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') joinChat();
+    });
+
+    sendBtn.addEventListener('click', sendMessage);
+    msgInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    // 自动聚焦
+    usernameInput.focus();
+</script>
+
+</body>
+</html>
